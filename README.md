@@ -24,4 +24,4 @@ This project aims to enable users to interact with a Black Magic camera using To
 
 Note: A video tutorial will be available as soon as possible.
 
-Credits to **marklysze** for their significant assistance and excellent work on ESP32 connection and TouchDesigner adaptation!
+Credits to **marklysze** for his significant assistance and excellent work on ESP32 connection and TouchDesigner adaptation!
