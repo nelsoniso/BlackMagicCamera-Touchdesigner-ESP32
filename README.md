@@ -1,33 +1,27 @@
-Controlling a Black Magic Camera with TouchDesigner and ESP32
-This project aims to empower users to interact with a Black Magic camera using TouchDesigner. Whether you're pursuing professional applications or engaging in more experimental pursuits, such as manipulating the camera's iris or focus through voice commands or motion gestures, this project has something to offer. The TouchDesigner project presents an intuitive interface, with all settings conveniently accessible from the main window. Additionally, you have the option to access the 'CAMERA_CONTROL' container, allowing you to fine-tune input parameters that trigger camera responses or fetch information from the camera.
+# *Controlling Black Magic Camera with TouchDesigner and ESP32*
 
-Required Hardware:
+This project aims to enable users to interact with a Black Magic camera using TouchDesigner. Whether it's for professional purposes or more experimental endeavors, such as controlling the camera's iris or focus using voice commands or motion gestures, this project has you covered. The TouchDesigner project provides a user-friendly interface, with all the settings conveniently located in the main window. However, you can also access the 'CAMERA_CONTROL' container to fine-tune the inputs that trigger camera reactions or retrieve information from the camera.
 
-ESP32 M5Stack: Get it here
-Black Magic Camera
-Compatible with Mac or Windows
-(To capture camera video in TouchDesigner, an adapter from Black Magic is required: [Adapter Link](adapter link))
-Software:
+**Required Hardware:**
+- ESP32 M5Stack: [Get it here](https://shop.m5stack.com/products/basic-core-iot-development-kit?variant=16804801937498)
+- Black Magic Camera
+- Mac or Windows
+- (If you want to capture the camera video signal in TouchDesigner, you'll need the adapter from Black Magic: [Adapter Link](https://www.blackmagicdesign.com/fr/products/ultrastudio/techspecs/W-DLUS-12))
 
-Visual Studio Code: Download here (free)
-PlatformIO Extension: [Installation Guide](PlatformIO link)
-TouchDesigner: Download here (free)
-For Mac users, download the driver available in the "01_Driver_Usb_Mac" folder.
-Setup:
-0. Begin by installing all necessary software components.
+**Software:**
+- Visual Studio Code: [Download here](https://code.visualstudio.com/) (free)
+- TouchDesigner: [Download here](https://derivative.ca/download) (free)
+- For Mac users, download the driver available in the "01_Driver_Usb_Mac" folder.
 
-Upload the code by marklysze onto your M5Stack. The repository and instructions are available here: [GitHub Repository](GitHub link).
+**Setup:**
+0. Install all the necessary software.
+1. Upload the code by **marklysze** to your M5Stack. You can find the repository and instructions here: [GitHub Repository](https://github.com/marklysze/Magic-Pocket-Control-ESP32)
+2. After uploading "m5stack-grey-touchdesigner" to your board, you can establish the initial Bluetooth connection with your Blackmagic camera.
+3. Close Visual Studio and launch the TouchDesigner project (included in this repository).
+4. In TouchDesigner, you need to establish the serial connection by identifying your port name and baud rate. Once connected, you'll be able to control your Black Magic camera using the 'CAMERA_CONTROL' UI.
+5. To capture the video signal from your camera in TouchDesigner, you can use the Black Magic UltraStudio Recorder 3G.
+6. Enjoy the functionalities!
 
-Once "m5stack-grey-touchdesigner" is uploaded to your board, you can initiate the initial Bluetooth connection with your Blackmagic camera.
+Note: A video tutorial will be available as soon as possible.
 
-Close Visual Studio and launch the provided TouchDesigner project (included in this repository).
-
-In TouchDesigner, establish a serial connection by identifying your port name and configuring the baud rate. Upon successful connection, you'll gain control over your Black Magic camera using the 'CAMERA_CONTROL' user interface.
-
-To capture your camera's video signal within TouchDesigner, leverage the Black Magic UltraStudio Recorder 3G.
-
-Enjoy the expanded functionalities!
-
-Note: A video tutorial detailing the process will be made available in the near future.
-
-Special acknowledgment to marklysze for their invaluable assistance and remarkable contributions to the ESP32 connection and TouchDesigner adaptation!
+Credits to **marklysze** for their significant assistance and excellent work on ESP32 connection and TouchDesigner adaptation!
