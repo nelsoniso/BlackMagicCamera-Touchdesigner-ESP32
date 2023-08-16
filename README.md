@@ -1,4 +1,4 @@
-# *Controlling Black Magic Camera with TouchDesigner and ESP32*
+# *Control Black Magic Camera with TouchDesigner and ESP32*
 
 This project aims to enable users to interact with a Black Magic camera using TouchDesigner. Whether it's for professional purposes or more experimental endeavors, such as controlling the camera's iris or focus using voice commands or motion gestures, this project has you covered. The TouchDesigner project provides a user-friendly interface, with all the settings conveniently located in the main window. However, you can also access the 'CAMERA_CONTROL' container to fine-tune the inputs that trigger camera reactions or retrieve information from the camera.
 
