@@ -14,6 +14,7 @@ This project aims to enable users to interact with a Black Magic camera using To
 - For Mac users, download the driver available in the "01_Driver_Usb_Mac" folder.
 
 **Setup:**
+
 0. Install all the necessary software.
 1. Upload the code by **marklysze** to your M5Stack. You can find the repository and instructions here: [GitHub Repository](https://github.com/marklysze/Magic-Pocket-Control-ESP32)
 2. After uploading "m5stack-grey-touchdesigner" to your board, you can establish the initial Bluetooth connection with your Blackmagic camera.
