@@ -22,6 +22,7 @@ This project aims to enable users to interact with a Black Magic camera using To
 6. To capture the video signal from your camera in TouchDesigner, you can use the Black Magic UltraStudio Recorder 3G.
 7. Enjoy the functionalities!
 
-Note: A video tutorial will be available as soon as possible.
+Video Tutorial
+
 
 Credits to **marklysze** for his significant assistance and excellent work on ESP32 connection and TouchDesigner adaptation!
