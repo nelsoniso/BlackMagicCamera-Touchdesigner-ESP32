@@ -21,8 +21,8 @@ This project aims to enable users to interact with a Black Magic camera using To
 5. In TouchDesigner, you need to establish the serial connection by identifying your port name and baud rate. Once connected, you'll be able to control your Black Magic camera using the 'CAMERA_CONTROL' UI.
 6. To capture the video signal from your camera in TouchDesigner, you can use the Black Magic UltraStudio Recorder 3G.
 7. Enjoy the functionalities!
-
+ 
 Video Tutorial
-https://studio.youtube.com/video/bKK1oZXNJ6k/edit
+ : https://studio.youtube.com/video/bKK1oZXNJ6k/edit
 
 Credits to **marklysze** for his significant assistance and excellent work on ESP32 connection and TouchDesigner adaptation!
