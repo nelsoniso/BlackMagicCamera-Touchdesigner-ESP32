@@ -23,6 +23,6 @@ This project aims to enable users to interact with a Black Magic camera using To
 7. Enjoy the functionalities!
 
 Video Tutorial
-
+https://studio.youtube.com/video/bKK1oZXNJ6k/edit
 
 Credits to **marklysze** for his significant assistance and excellent work on ESP32 connection and TouchDesigner adaptation!
