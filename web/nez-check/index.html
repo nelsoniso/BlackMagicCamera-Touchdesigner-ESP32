@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Nose ROI Check (Caméra frontale)</title>
+  <style>
+    :root {
+      --bg: #0b0f1a;
+      --panel: #131a2a;
+      --text: #ecf2ff;
+      --muted: #a6b2cc;
+      --ok: #2ecc71;
+      --warn: #f1c40f;
+      --bad: #e74c3c;
+      --accent: #5aa9ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 14px;
+      min-height: 100dvh;
+      background: radial-gradient(circle at 20% 0%, #1a2540 0%, #0b0f1a 56%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .wrap { max-width: 820px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: 1.25rem; }
+    .sub { margin: 0 0 12px; color: var(--muted); font-size: 0.92rem; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: white;
+      background: var(--accent);
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    button.secondary { background: #3f4e6d; }
+    button:disabled { opacity: 0.55; }
+    .status {
+      margin: 0 0 12px;
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.9rem;
+    }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .stage {
+      position: relative;
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: #000;
+      aspect-ratio: 3/4;
+      max-height: 70dvh;
+    }
+    video, canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .panel {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    @media (min-width: 700px) {
+      .panel { grid-template-columns: 1fr 1fr; }
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .k { color: var(--muted); font-size: 0.86rem; margin-bottom: 4px; }
+    .v {
+      font-family: ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 1.02rem;
+    }
+    .foot {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    code {
+      background: rgba(255,255,255,0.12);
+      border-radius: 6px;
+      padding: 2px 5px;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Caméra frontale + nez ROI (OpenCV.js)</h1>
+    <p class="sub">Analyse visuelle non médicale. Donne un score indicatif uniquement.</p>
+
+    <div class="controls">
+      <button id="startBtn">Démarrer la caméra</button>
+      <button id="stopBtn" class="secondary" disabled>Stop</button>
+    </div>
+
+    <p id="status" class="status">Initialisation… chargement des modèles.</p>
+
+    <section class="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <div class="k">Indice “sombre” dans ROI nez</div>
+        <div id="darkRatio" class="v">-</div>
+      </article>
+      <article class="card">
+        <div class="k">Évaluation instantanée</div>
+        <div id="verdict" class="v">En attente</div>
+      </article>
+    </section>
+
+    <p class="foot">
+      Nécessite <code>https://</code> et permission caméra. Fonctionne mieux en bonne lumière.
+      Cette app ne remplace pas un avis médical.
+    </p>
+  </main>
+
+  <script>
+    // OpenCV runtime callback (called by script tag onload)
+    function onOpenCvScriptLoad() {
+      if (!window.cv) return;
+      cv.onRuntimeInitialized = () => {
+        state.cvReady = true;
+        tryReady();
+      };
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script async src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCvScriptLoad()"></script>
+
+  <script>
+    const state = {
+      cvReady: false,
+      faceReady: false,
+      running: false,
+      stream: null,
+      faceMesh: null
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const startBtn = $("startBtn");
+    const stopBtn = $("stopBtn");
+    const statusEl = $("status");
+    const darkRatioEl = $("darkRatio");
+    const verdictEl = $("verdict");
+    const video = $("video");
+    const overlay = $("overlay");
+    const ctx = overlay.getContext("2d");
+
+    const workCanvas = document.createElement("canvas");
+    const workCtx = workCanvas.getContext("2d", { willReadFrequently: true });
+
+    function setStatus(text, level) {
+      statusEl.textContent = text;
+      statusEl.className = "status";
+      if (level) statusEl.classList.add(level);
+    }
+
+    function resizeCanvases() {
+      const rect = overlay.getBoundingClientRect();
+      overlay.width = Math.round(rect.width);
+      overlay.height = Math.round(rect.height);
+      workCanvas.width = overlay.width;
+      workCanvas.height = overlay.height;
+    }
+
+    function tryReady() {
+      if (state.cvReady && state.faceReady) {
+        setStatus("Prêt. Tape sur Démarrer la caméra.", "ok");
+      } else if (state.cvReady || state.faceReady) {
+        setStatus("Chargement en cours…", "warn");
+      }
+    }
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function toPx(lm) {
+      return {
+        x: lm.x * overlay.width,
+        y: lm.y * overlay.height
+      };
+    }
+
+    function computeNoseRect(landmarks) {
+      // Approximate lower-nose points from FaceMesh topology.
+      const indices = [1, 2, 98, 327, 5, 197];
+      const points = indices
+        .map((idx) => landmarks[idx])
+        .filter(Boolean)
+        .map(toPx);
+
+      if (points.length < 3) return null;
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const p of points) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+
+      // Expand a bit around nostrils area.
+      const padX = (maxX - minX) * 0.45 + 12;
+      const padYTop = (maxY - minY) * 0.35 + 8;
+      const padYBottom = (maxY - minY) * 0.95 + 16;
+
+      minX -= padX;
+      maxX += padX;
+      minY -= padYTop;
+      maxY += padYBottom;
+
+      minX = clamp(Math.round(minX), 0, overlay.width - 1);
+      minY = clamp(Math.round(minY), 0, overlay.height - 1);
+      maxX = clamp(Math.round(maxX), minX + 1, overlay.width);
+      maxY = clamp(Math.round(maxY), minY + 1, overlay.height);
+
+      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    }
+
+    function classify(darkRatio) {
+      if (!Number.isFinite(darkRatio)) {
+        return { label: "Pas de mesure", level: "warn" };
+      }
+      if (darkRatio < 0.06) {
+        return { label: "Semble propre", level: "ok" };
+      }
+      if (darkRatio < 0.13) {
+        return { label: "À vérifier (léger doute)", level: "warn" };
+      }
+      return { label: "Possible obstruction visible", level: "bad" };
+    }
+
+    function drawNoseBox(rect, verdict) {
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = verdict.level === "ok" ? "#2ecc71" : verdict.level === "warn" ? "#f1c40f" : "#e74c3c";
+      ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(rect.x, Math.max(0, rect.y - 22), 220, 20);
+      ctx.fillStyle = "#fff";
+      ctx.font = "12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.fillText(`ROI nez: ${verdict.label}`, rect.x + 6, Math.max(13, rect.y - 8));
+    }
+
+    function processRoiWithOpenCv(rect) {
+      workCtx.drawImage(video, 0, 0, workCanvas.width, workCanvas.height);
+      const src = cv.imread(workCanvas);
+      const roiRect = new cv.Rect(rect.x, rect.y, rect.width, rect.height);
+      const roi = src.roi(roiRect);
+
+      const gray = new cv.Mat();
+      const blur = new cv.Mat();
+      const bin = new cv.Mat();
+
+      cv.cvtColor(roi, gray, cv.COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
+      cv.threshold(blur, bin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+      const darkPixels = cv.countNonZero(bin);
+      const totalPixels = bin.rows * bin.cols;
+      const darkRatio = totalPixels > 0 ? darkPixels / totalPixels : NaN;
+
+      gray.delete();
+      blur.delete();
+      bin.delete();
+      roi.delete();
+      src.delete();
+
+      return darkRatio;
+    }
+
+    async function setupFaceMesh() {
+      const faceMesh = new FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+      });
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.55
+      });
+
+      faceMesh.onResults((results) => {
+        if (!state.running) return;
+        resizeCanvases();
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+        if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+          verdictEl.textContent = "Visage non détecté";
+          verdictEl.className = "v warn";
+          darkRatioEl.textContent = "-";
+          return;
+        }
+
+        const lm = results.multiFaceLandmarks[0];
+        const noseRect = computeNoseRect(lm);
+        if (!noseRect || noseRect.width < 18 || noseRect.height < 18) {
+          verdictEl.textContent = "ROI nez indisponible";
+          verdictEl.className = "v warn";
+          darkRatioEl.textContent = "-";
+          return;
+        }
+
+        let darkRatio = NaN;
+        try {
+          darkRatio = processRoiWithOpenCv(noseRect);
+        } catch (err) {
+          setStatus(`Erreur OpenCV: ${err && err.message ? err.message : "unknown"}`, "bad");
+          return;
+        }
+
+        const verdict = classify(darkRatio);
+        drawNoseBox(noseRect, verdict);
+
+        darkRatioEl.textContent = Number.isFinite(darkRatio) ? darkRatio.toFixed(3) : "-";
+        verdictEl.textContent = verdict.label;
+        verdictEl.className = `v ${verdict.level}`;
+      });
+
+      state.faceMesh = faceMesh;
+      state.faceReady = true;
+      tryReady();
+    }
+
+    async function startCamera() {
+      if (!window.isSecureContext) {
+        setStatus("HTTPS requis pour accéder à la caméra.", "bad");
+        return;
+      }
+      if (!state.cvReady || !state.faceReady) {
+        setStatus("Patiente: modèles encore en chargement…", "warn");
+        return;
+      }
+      try {
+        state.stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 960 } },
+          audio: false
+        });
+        video.srcObject = state.stream;
+        await video.play();
+
+        state.running = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        setStatus("Caméra active. Analyse en direct…", "ok");
+
+        const camera = new Camera(video, {
+          onFrame: async () => {
+            if (!state.running || !state.faceMesh) return;
+            await state.faceMesh.send({ image: video });
+          },
+          width: 720,
+          height: 960
+        });
+        state.cameraLoop = camera;
+        camera.start();
+      } catch (err) {
+        setStatus(`Caméra refusée ou indisponible: ${err && err.message ? err.message : "erreur"}`, "bad");
+      }
+    }
+
+    function stopCamera() {
+      state.running = false;
+      if (state.cameraLoop && typeof state.cameraLoop.stop === "function") {
+        state.cameraLoop.stop();
+      }
+      if (state.stream) {
+        state.stream.getTracks().forEach((t) => t.stop());
+      }
+      state.stream = null;
+      video.srcObject = null;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      setStatus("Caméra stoppée.", "warn");
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      darkRatioEl.textContent = "-";
+      verdictEl.textContent = "En attente";
+      verdictEl.className = "v";
+    }
+
+    startBtn.addEventListener("click", startCamera);
+    stopBtn.addEventListener("click", stopCamera);
+    window.addEventListener("resize", resizeCanvases);
+
+    resizeCanvases();
+    setupFaceMesh().catch((err) => {
+      setStatus(`Erreur FaceMesh: ${err && err.message ? err.message : "unknown"}`, "bad");
+    });
+  </script>
+</body>
+</html>
