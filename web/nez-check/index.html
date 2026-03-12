@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Nose ROI Check (Caméra frontale)</title>
+  <title>Nose ROI Check (narines précises)</title>
   <style>
     :root {
       --bg: #0b0f1a;
@@ -103,8 +103,8 @@
 </head>
 <body>
   <main class="wrap">
-    <h1>Caméra frontale + nez ROI (OpenCV.js)</h1>
-    <p class="sub">Analyse visuelle non médicale. Donne un score indicatif uniquement.</p>
+    <h1>Caméra frontale + narines (OpenCV.js)</h1>
+    <p class="sub">ROI ciblées sur l'intérieur des narines, verdict binaire: propre / sale.</p>
 
     <div class="controls">
       <button id="startBtn">Démarrer la caméra</button>
@@ -120,18 +120,26 @@
 
     <section class="panel">
       <article class="card">
-        <div class="k">Indice “sombre” dans ROI nez</div>
-        <div id="darkRatio" class="v">-</div>
+        <div class="k">Score narines (lissé)</div>
+        <div id="nostrilScore" class="v">-</div>
       </article>
       <article class="card">
-        <div class="k">Évaluation instantanée</div>
+        <div class="k">Narines gauche / droite</div>
+        <div id="splitScore" class="v">-</div>
+      </article>
+      <article class="card">
+        <div class="k">Baseline / delta</div>
+        <div id="deltaScore" class="v">-</div>
+      </article>
+      <article class="card">
+        <div class="k">Verdict</div>
         <div id="verdict" class="v">En attente</div>
       </article>
     </section>
 
     <p class="foot">
       Nécessite <code>https://</code> et permission caméra. Fonctionne mieux en bonne lumière.
-      Cette app ne remplace pas un avis médical.
+      Cette app ne remplace pas un avis médical. C'est une estimation visuelle.
     </p>
   </main>
 
@@ -155,14 +163,20 @@
       faceReady: false,
       running: false,
       stream: null,
-      faceMesh: null
+      faceMesh: null,
+      cameraLoop: null,
+      smoothWindow: [],
+      baselineSamples: [],
+      baselineScore: null
     };
 
     const $ = (id) => document.getElementById(id);
     const startBtn = $("startBtn");
     const stopBtn = $("stopBtn");
     const statusEl = $("status");
-    const darkRatioEl = $("darkRatio");
+    const nostrilScoreEl = $("nostrilScore");
+    const splitScoreEl = $("splitScore");
+    const deltaScoreEl = $("deltaScore");
     const verdictEl = $("verdict");
     const video = $("video");
     const overlay = $("overlay");
@@ -205,7 +219,7 @@
     }
 
     function computeNoseRect(landmarks) {
-      // Approximate lower-nose points from FaceMesh topology.
+      // Approximate nose area from selected FaceMesh landmarks.
       const indices = [1, 2, 98, 327, 5, 197];
       const points = indices
         .map((idx) => landmarks[idx])
@@ -222,10 +236,10 @@
         if (p.y > maxY) maxY = p.y;
       }
 
-      // Expand a bit around nostrils area.
-      const padX = (maxX - minX) * 0.45 + 12;
-      const padYTop = (maxY - minY) * 0.35 + 8;
-      const padYBottom = (maxY - minY) * 0.95 + 16;
+      // Keep a tighter rectangle around the lower nose.
+      const padX = (maxX - minX) * 0.34 + 8;
+      const padYTop = (maxY - minY) * 0.25 + 6;
+      const padYBottom = (maxY - minY) * 0.55 + 10;
 
       minX -= padX;
       maxX += padX;
@@ -240,55 +254,142 @@
       return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
 
-    function classify(darkRatio) {
-      if (!Number.isFinite(darkRatio)) {
-        return { label: "Pas de mesure", level: "warn" };
-      }
-      if (darkRatio < 0.06) {
-        return { label: "Semble propre", level: "ok" };
-      }
-      if (darkRatio < 0.13) {
-        return { label: "À vérifier (léger doute)", level: "warn" };
-      }
-      return { label: "Possible obstruction visible", level: "bad" };
+    function computeNostrilRects(noseRect) {
+      const w = noseRect.width;
+      const h = noseRect.height;
+
+      const nostrilW = Math.max(14, Math.round(w * 0.24));
+      const nostrilH = Math.max(12, Math.round(h * 0.24));
+      const centerY = Math.round(noseRect.y + h * 0.68);
+      const leftCenterX = Math.round(noseRect.x + w * 0.41);
+      const rightCenterX = Math.round(noseRect.x + w * 0.59);
+
+      const mkRect = (cx, cy) => {
+        const x = clamp(Math.round(cx - nostrilW / 2), 0, overlay.width - 2);
+        const y = clamp(Math.round(cy - nostrilH / 2), 0, overlay.height - 2);
+        const maxW = overlay.width - x;
+        const maxH = overlay.height - y;
+        return {
+          x,
+          y,
+          width: clamp(nostrilW, 2, maxW),
+          height: clamp(nostrilH, 2, maxH)
+        };
+      };
+
+      return {
+        left: mkRect(leftCenterX, centerY),
+        right: mkRect(rightCenterX, centerY)
+      };
     }
 
-    function drawNoseBox(rect, verdict) {
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = verdict.level === "ok" ? "#2ecc71" : verdict.level === "warn" ? "#f1c40f" : "#e74c3c";
-      ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.fillRect(rect.x, Math.max(0, rect.y - 22), 220, 20);
-      ctx.fillStyle = "#fff";
-      ctx.font = "12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-      ctx.fillText(`ROI nez: ${verdict.label}`, rect.x + 6, Math.max(13, rect.y - 8));
+    function smoothScore(score) {
+      state.smoothWindow.push(score);
+      if (state.smoothWindow.length > 12) state.smoothWindow.shift();
+      const sum = state.smoothWindow.reduce((acc, v) => acc + v, 0);
+      return sum / state.smoothWindow.length;
     }
 
-    function processRoiWithOpenCv(rect) {
-      workCtx.drawImage(video, 0, 0, workCanvas.width, workCanvas.height);
-      const src = cv.imread(workCanvas);
+    function analyzeSingleNostril(src, rect) {
       const roiRect = new cv.Rect(rect.x, rect.y, rect.width, rect.height);
       const roi = src.roi(roiRect);
-
       const gray = new cv.Mat();
+      const eq = new cv.Mat();
       const blur = new cv.Mat();
       const bin = new cv.Mat();
+      const clean = new cv.Mat();
+      const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
 
       cv.cvtColor(roi, gray, cv.COLOR_RGBA2GRAY);
-      cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
+      cv.equalizeHist(gray, eq);
+      cv.GaussianBlur(eq, blur, new cv.Size(5, 5), 0);
       cv.threshold(blur, bin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+      cv.morphologyEx(bin, clean, cv.MORPH_OPEN, kernel);
 
-      const darkPixels = cv.countNonZero(bin);
-      const totalPixels = bin.rows * bin.cols;
-      const darkRatio = totalPixels > 0 ? darkPixels / totalPixels : NaN;
+      const darkPixels = cv.countNonZero(clean);
+      const totalPixels = clean.rows * clean.cols;
+      const darkRatio = totalPixels > 0 ? darkPixels / totalPixels : 0;
+
+      cv.findContours(clean, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+      let maxArea = 0;
+      for (let i = 0; i < contours.size(); i += 1) {
+        const cnt = contours.get(i);
+        const a = cv.contourArea(cnt);
+        if (a > maxArea) maxArea = a;
+        cnt.delete();
+      }
+      const blobRatio = totalPixels > 0 ? maxArea / totalPixels : 0;
 
       gray.delete();
+      eq.delete();
       blur.delete();
       bin.delete();
+      clean.delete();
+      kernel.delete();
+      contours.delete();
+      hierarchy.delete();
       roi.delete();
-      src.delete();
 
-      return darkRatio;
+      // Mixed score: amount of dark content + compact dark blob.
+      const score = 0.7 * darkRatio + 0.3 * blobRatio;
+      return {
+        darkRatio,
+        blobRatio,
+        score
+      };
+    }
+
+    function processNostrilsWithOpenCv(nostrils) {
+      workCtx.drawImage(video, 0, 0, workCanvas.width, workCanvas.height);
+      const src = cv.imread(workCanvas);
+
+      const left = analyzeSingleNostril(src, nostrils.left);
+      const right = analyzeSingleNostril(src, nostrils.right);
+
+      src.delete();
+      return {
+        left,
+        right,
+        meanScore: (left.score + right.score) / 2
+      };
+    }
+
+    function classifyBinary(smoothedScore) {
+      if (!Number.isFinite(smoothedScore) || state.baselineScore === null) {
+        return { label: "propre", level: "ok", delta: 0 };
+      }
+      const delta = smoothedScore - state.baselineScore;
+      const isDirty = delta >= 0.022;
+      return {
+        label: isDirty ? "sale" : "propre",
+        level: isDirty ? "bad" : "ok",
+        delta
+      };
+    }
+
+    function drawOverlay(noseRect, nostrils, verdict) {
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#67a4ff";
+      ctx.strokeRect(noseRect.x, noseRect.y, noseRect.width, noseRect.height);
+
+      const nostrilColor = verdict.level === "bad" ? "#e74c3c" : "#2ecc71";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = nostrilColor;
+      ctx.strokeRect(nostrils.left.x, nostrils.left.y, nostrils.left.width, nostrils.left.height);
+      ctx.strokeRect(nostrils.right.x, nostrils.right.y, nostrils.right.width, nostrils.right.height);
+
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(noseRect.x, Math.max(0, noseRect.y - 22), 220, 20);
+      ctx.fillStyle = "#fff";
+      ctx.font = "12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.fillText(`narines: ${verdict.label}`, noseRect.x + 6, Math.max(13, noseRect.y - 8));
+
+      ctx.fillStyle = "#ffffffcc";
+      ctx.font = "10px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.fillText("G", nostrils.left.x + 3, nostrils.left.y + 11);
+      ctx.fillText("D", nostrils.right.x + 3, nostrils.right.y + 11);
     }
 
     async function setupFaceMesh() {
@@ -310,7 +411,9 @@
         if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
           verdictEl.textContent = "Visage non détecté";
           verdictEl.className = "v warn";
-          darkRatioEl.textContent = "-";
+          nostrilScoreEl.textContent = "-";
+          splitScoreEl.textContent = "-";
+          deltaScoreEl.textContent = "-";
           return;
         }
 
@@ -319,22 +422,43 @@
         if (!noseRect || noseRect.width < 18 || noseRect.height < 18) {
           verdictEl.textContent = "ROI nez indisponible";
           verdictEl.className = "v warn";
-          darkRatioEl.textContent = "-";
+          nostrilScoreEl.textContent = "-";
+          splitScoreEl.textContent = "-";
+          deltaScoreEl.textContent = "-";
           return;
         }
 
-        let darkRatio = NaN;
+        const nostrils = computeNostrilRects(noseRect);
+        let analysis = null;
         try {
-          darkRatio = processRoiWithOpenCv(noseRect);
+          analysis = processNostrilsWithOpenCv(nostrils);
         } catch (err) {
           setStatus(`Erreur OpenCV: ${err && err.message ? err.message : "unknown"}`, "bad");
           return;
         }
 
-        const verdict = classify(darkRatio);
-        drawNoseBox(noseRect, verdict);
+        const smoothed = smoothScore(analysis.meanScore);
+        if (state.baselineScore === null) {
+          state.baselineSamples.push(smoothed);
+          if (state.baselineSamples.length >= 25) {
+            const sum = state.baselineSamples.reduce((acc, v) => acc + v, 0);
+            state.baselineScore = sum / state.baselineSamples.length;
+            setStatus("Baseline prête. Verdict propre/sale actif.", "ok");
+          } else {
+            setStatus(`Calibration… ${state.baselineSamples.length}/25`, "warn");
+          }
+        }
 
-        darkRatioEl.textContent = Number.isFinite(darkRatio) ? darkRatio.toFixed(3) : "-";
+        const verdict = classifyBinary(smoothed);
+        drawOverlay(noseRect, nostrils, verdict);
+
+        nostrilScoreEl.textContent = Number.isFinite(smoothed) ? smoothed.toFixed(3) : "-";
+        splitScoreEl.textContent = `G ${analysis.left.score.toFixed(3)} / D ${analysis.right.score.toFixed(3)}`;
+        if (state.baselineScore === null) {
+          deltaScoreEl.textContent = "baseline en cours";
+        } else {
+          deltaScoreEl.textContent = `base ${state.baselineScore.toFixed(3)} / Δ ${verdict.delta.toFixed(3)}`;
+        }
         verdictEl.textContent = verdict.label;
         verdictEl.className = `v ${verdict.level}`;
       });
@@ -395,9 +519,14 @@
       stopBtn.disabled = true;
       setStatus("Caméra stoppée.", "warn");
       ctx.clearRect(0, 0, overlay.width, overlay.height);
-      darkRatioEl.textContent = "-";
+      nostrilScoreEl.textContent = "-";
+      splitScoreEl.textContent = "-";
+      deltaScoreEl.textContent = "-";
       verdictEl.textContent = "En attente";
       verdictEl.className = "v";
+      state.smoothWindow = [];
+      state.baselineSamples = [];
+      state.baselineScore = null;
     }
 
     startBtn.addEventListener("click", startCamera);
