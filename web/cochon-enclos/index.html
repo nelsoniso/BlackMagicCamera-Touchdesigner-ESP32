@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cochons & Contacts</title>
+  <style>
+    :root {
+      --bg: #e7f6de;
+      --fence: #ba8f63;
+      --text: #243424;
+      --panel: #ffffffcc;
+      --accent: #1f8f4f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, #d6f0cc 0%, #effbe9 100%);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 12px 14px 10px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.15rem;
+    }
+    .subtitle {
+      margin: 4px 0 0;
+      font-size: 0.88rem;
+      opacity: 0.8;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .status {
+      margin: 8px 0 0;
+      font-size: 0.86rem;
+      background: var(--panel);
+      border-radius: 10px;
+      padding: 6px 10px;
+      border: 1px solid #00000018;
+    }
+    .add-btn {
+      appearance: none;
+      border: 0;
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 1.8rem;
+      line-height: 1;
+      font-weight: 600;
+      box-shadow: 0 8px 20px #00000022;
+    }
+    .arena-wrap {
+      padding: 10px 14px 16px;
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+    #arena {
+      position: relative;
+      width: 100%;
+      min-height: 320px;
+      border: 10px solid var(--fence);
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at 10% 20%, #cdf0bd 0, #cdf0bd 8px, transparent 8px),
+        radial-gradient(circle at 40% 70%, #d8f4ca 0, #d8f4ca 7px, transparent 7px),
+        radial-gradient(circle at 80% 30%, #d8f4ca 0, #d8f4ca 9px, transparent 9px),
+        linear-gradient(180deg, #bde8ab 0%, #a7dd97 100%);
+      overflow: hidden;
+      box-shadow: inset 0 0 40px #00000016;
+    }
+    .pig {
+      position: absolute;
+      width: 62px;
+      height: 62px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      user-select: none;
+      touch-action: none;
+      transform: translate(-50%, -50%);
+      will-change: transform;
+    }
+    .pig-name {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ffffffd9;
+      border: 1px solid #00000020;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 0.72rem;
+      white-space: nowrap;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    footer {
+      padding: 0 14px 12px;
+      font-size: 0.78rem;
+      opacity: 0.8;
+    }
+    code {
+      background: #ffffff88;
+      border-radius: 5px;
+      padding: 1px 4px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <div>
+        <h1>Cochons dans l'enclos</h1>
+        <p class="subtitle">Tap sur + pour ajouter un cochon-contact.</p>
+      </div>
+      <button id="addPigBtn" class="add-btn" aria-label="Ajouter un contact">+</button>
+    </div>
+    <p id="status" class="status">Prêt : 4 cochons par défaut.</p>
+  </header>
+
+  <section class="arena-wrap">
+    <div id="arena"></div>
+  </section>
+
+  <footer>
+    Sur iPhone, l'accès contact dépend du support navigateur de <code>navigator.contacts.select</code>.
+  </footer>
+
+  <script>
+    const arena = document.getElementById("arena");
+    const addPigBtn = document.getElementById("addPigBtn");
+    const statusEl = document.getElementById("status");
+
+    const pigs = [];
+    let pigId = 1;
+    let arenaW = 0;
+    let arenaH = 0;
+    let previousTs = 0;
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function updateArenaSize() {
+      const rect = arena.getBoundingClientRect();
+      arenaW = rect.width;
+      arenaH = rect.height;
+    }
+
+    function random(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function createPig(name) {
+      updateArenaSize();
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "pig";
+      wrapper.textContent = "🐷";
+
+      const label = document.createElement("div");
+      label.className = "pig-name";
+      label.textContent = name;
+      wrapper.appendChild(label);
+
+      arena.appendChild(wrapper);
+
+      const pig = {
+        id: pigId++,
+        name,
+        el: wrapper,
+        x: random(40, Math.max(41, arenaW - 40)),
+        y: random(40, Math.max(41, arenaH - 40)),
+        vx: random(-28, 28),
+        vy: random(-28, 28),
+        jitterCooldown: random(0.2, 0.9)
+      };
+
+      // Avoid frozen pigs on spawn.
+      if (Math.abs(pig.vx) < 8) pig.vx = pig.vx < 0 ? -18 : 18;
+      if (Math.abs(pig.vy) < 8) pig.vy = pig.vy < 0 ? -18 : 18;
+
+      pigs.push(pig);
+      drawPig(pig);
+      return pig;
+    }
+
+    function drawPig(pig) {
+      pig.el.style.transform = `translate(${pig.x - 31}px, ${pig.y - 31}px)`;
+    }
+
+    function stepPig(pig, dt) {
+      pig.jitterCooldown -= dt;
+      if (pig.jitterCooldown <= 0) {
+        pig.vx += random(-35, 35);
+        pig.vy += random(-35, 35);
+        pig.jitterCooldown = random(0.25, 1.1);
+      }
+
+      const maxSpeed = 70;
+      const speed = Math.hypot(pig.vx, pig.vy);
+      if (speed > maxSpeed) {
+        const k = maxSpeed / speed;
+        pig.vx *= k;
+        pig.vy *= k;
+      }
+
+      pig.x += pig.vx * dt;
+      pig.y += pig.vy * dt;
+
+      const minX = 32;
+      const maxX = arenaW - 32;
+      const minY = 32;
+      const maxY = arenaH - 32;
+
+      if (pig.x < minX) {
+        pig.x = minX;
+        pig.vx = Math.abs(pig.vx) + random(8, 20);
+      } else if (pig.x > maxX) {
+        pig.x = maxX;
+        pig.vx = -Math.abs(pig.vx) - random(8, 20);
+      }
+
+      if (pig.y < minY) {
+        pig.y = minY;
+        pig.vy = Math.abs(pig.vy) + random(8, 20);
+      } else if (pig.y > maxY) {
+        pig.y = maxY;
+        pig.vy = -Math.abs(pig.vy) - random(8, 20);
+      }
+    }
+
+    function loop(ts) {
+      if (!previousTs) previousTs = ts;
+      const dt = Math.min((ts - previousTs) / 1000, 0.05);
+      previousTs = ts;
+
+      for (const pig of pigs) {
+        stepPig(pig, dt);
+        drawPig(pig);
+      }
+      requestAnimationFrame(loop);
+    }
+
+    function normalizeContactName(contact) {
+      if (!contact) return "";
+      if (Array.isArray(contact.name) && contact.name.length > 0) {
+        return String(contact.name[0]).trim();
+      }
+      if (typeof contact.name === "string") {
+        return contact.name.trim();
+      }
+      return "";
+    }
+
+    async function pickContactName() {
+      if (window.isSecureContext && navigator.contacts && navigator.contacts.select) {
+        try {
+          const selected = await navigator.contacts.select(["name"], { multiple: false });
+          if (!selected || selected.length === 0) return "";
+          return normalizeContactName(selected[0]);
+        } catch (err) {
+          // User canceled picker or browser blocked it.
+          return "";
+        }
+      }
+
+      const typed = window.prompt("Nom du contact (fallback manuel):");
+      return typed ? typed.trim() : "";
+    }
+
+    addPigBtn.addEventListener("click", async () => {
+      const name = await pickContactName();
+      if (!name) {
+        setStatus("Aucun contact ajouté.");
+        return;
+      }
+      createPig(name);
+      setStatus(`Nouveau cochon: ${name}. Total: ${pigs.length}`);
+    });
+
+    window.addEventListener("resize", () => {
+      updateArenaSize();
+      for (const pig of pigs) {
+        pig.x = clamp(pig.x, 32, Math.max(32, arenaW - 32));
+        pig.y = clamp(pig.y, 32, Math.max(32, arenaH - 32));
+        drawPig(pig);
+      }
+    });
+
+    updateArenaSize();
+    ["Choupette", "Biscotte", "Nugget", "Rosalie"].forEach(createPig);
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
