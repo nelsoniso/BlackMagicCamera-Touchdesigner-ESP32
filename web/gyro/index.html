@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>iPhone Gyroscope Live</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0b0f1a;
+      --card: #121a2b;
+      --text: #e7edf9;
+      --muted: #9fb0cf;
+      --ok: #2ecc71;
+      --warn: #f39c12;
+      --bad: #e74c3c;
+      --accent: #5aa9ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 18px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.45rem;
+      line-height: 1.2;
+    }
+    p.sub {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 680px) {
+      .grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+    }
+    .row:last-child { border-bottom: 0; }
+    .k {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .v {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.95rem;
+      text-align: right;
+      min-width: 110px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 14px;
+    }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: white;
+      background: var(--accent);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #3a465f;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .status {
+      margin: 0 0 14px;
+      font-size: 0.93rem;
+    }
+    .status .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .dot.ok { background: var(--ok); }
+    .dot.warn { background: var(--warn); }
+    .dot.bad { background: var(--bad); }
+    .footnote {
+      color: var(--muted);
+      margin-top: 12px;
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+    code {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 2px 6px;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Live Gyroscope Viewer</h1>
+    <p class="sub">Open on iPhone, tap Start, then accept motion access.</p>
+
+    <div class="controls">
+      <button id="startBtn">Start sensor stream</button>
+      <button id="stopBtn" class="secondary" disabled>Stop</button>
+    </div>
+
+    <p id="status" class="status warn"><span class="dot warn"></span>Waiting for permission</p>
+
+    <section class="grid">
+      <article class="card">
+        <h2 style="margin: 0 0 10px; font-size: 1rem;">Gyroscope rate (deg/s)</h2>
+        <div class="row"><span class="k">alpha (z)</span><span class="v" id="gyroAlpha">0.000</span></div>
+        <div class="row"><span class="k">beta (x)</span><span class="v" id="gyroBeta">0.000</span></div>
+        <div class="row"><span class="k">gamma (y)</span><span class="v" id="gyroGamma">0.000</span></div>
+        <div class="row"><span class="k">event interval</span><span class="v" id="eventInterval">-</span></div>
+      </article>
+
+      <article class="card">
+        <h2 style="margin: 0 0 10px; font-size: 1rem;">Orientation (deg)</h2>
+        <div class="row"><span class="k">alpha (compass-ish)</span><span class="v" id="oriAlpha">0.000</span></div>
+        <div class="row"><span class="k">beta (front/back)</span><span class="v" id="oriBeta">0.000</span></div>
+        <div class="row"><span class="k">gamma (left/right)</span><span class="v" id="oriGamma">0.000</span></div>
+        <div class="row"><span class="k">last update</span><span class="v" id="lastUpdate">-</span></div>
+      </article>
+    </section>
+
+    <p class="footnote">
+      iOS notes: this must run over <code>https://</code> and requires a user tap before
+      calling <code>requestPermission()</code>. If values stay at 0, ensure Motion &amp; Orientation
+      Access is enabled in Safari settings.
+    </p>
+  </main>
+
+  <script>
+    const el = {
+      startBtn: document.getElementById("startBtn"),
+      stopBtn: document.getElementById("stopBtn"),
+      status: document.getElementById("status"),
+      gyroAlpha: document.getElementById("gyroAlpha"),
+      gyroBeta: document.getElementById("gyroBeta"),
+      gyroGamma: document.getElementById("gyroGamma"),
+      eventInterval: document.getElementById("eventInterval"),
+      oriAlpha: document.getElementById("oriAlpha"),
+      oriBeta: document.getElementById("oriBeta"),
+      oriGamma: document.getElementById("oriGamma"),
+      lastUpdate: document.getElementById("lastUpdate")
+    };
+
+    let listening = false;
+
+    function fmt(n) {
+      return Number.isFinite(n) ? n.toFixed(3) : "n/a";
+    }
+
+    function setStatus(level, text) {
+      el.status.className = `status ${level}`;
+      el.status.innerHTML = `<span class="dot ${level}"></span>${text}`;
+    }
+
+    async function askPermissionIfNeeded(eventTypeName) {
+      const api = window[eventTypeName];
+      if (!api || typeof api.requestPermission !== "function") {
+        return "granted";
+      }
+      return api.requestPermission();
+    }
+
+    function onMotion(event) {
+      const r = event.rotationRate || {};
+      // Safari uses degrees/sec for rotationRate.
+      el.gyroAlpha.textContent = fmt(r.alpha);
+      el.gyroBeta.textContent = fmt(r.beta);
+      el.gyroGamma.textContent = fmt(r.gamma);
+      if (typeof event.interval === "number") {
+        el.eventInterval.textContent = `${fmt(event.interval)} ms`;
+      }
+      el.lastUpdate.textContent = new Date().toLocaleTimeString();
+    }
+
+    function onOrientation(event) {
+      el.oriAlpha.textContent = fmt(event.alpha);
+      el.oriBeta.textContent = fmt(event.beta);
+      el.oriGamma.textContent = fmt(event.gamma);
+    }
+
+    function startListeners() {
+      if (listening) return;
+      window.addEventListener("devicemotion", onMotion, true);
+      window.addEventListener("deviceorientation", onOrientation, true);
+      listening = true;
+      el.startBtn.disabled = true;
+      el.stopBtn.disabled = false;
+      setStatus("ok", "Streaming live sensor data");
+    }
+
+    function stopListeners() {
+      if (!listening) return;
+      window.removeEventListener("devicemotion", onMotion, true);
+      window.removeEventListener("deviceorientation", onOrientation, true);
+      listening = false;
+      el.startBtn.disabled = false;
+      el.stopBtn.disabled = true;
+      setStatus("warn", "Stream stopped");
+    }
+
+    el.startBtn.addEventListener("click", async () => {
+      if (!window.isSecureContext) {
+        setStatus("bad", "Blocked: motion API needs HTTPS");
+        return;
+      }
+      try {
+        const motionResult = await askPermissionIfNeeded("DeviceMotionEvent");
+        const orientationResult = await askPermissionIfNeeded("DeviceOrientationEvent");
+        if (motionResult !== "granted" || orientationResult !== "granted") {
+          setStatus("bad", "Permission denied");
+          return;
+        }
+        startListeners();
+      } catch (err) {
+        setStatus("bad", `Permission error: ${err && err.message ? err.message : "unknown error"}`);
+      }
+    });
+
+    el.stopBtn.addEventListener("click", stopListeners);
+
+    if (!("DeviceMotionEvent" in window) && !("DeviceOrientationEvent" in window)) {
+      setStatus("bad", "This browser does not expose motion sensors");
+      el.startBtn.disabled = true;
+    }
+  </script>
+</body>
+</html>
