@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spotify iPhone Web Control</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <h1>Spotify Web Control</h1>
+      <p class="hint">
+        Sign in with Spotify, then use the slider to jump forward/backward in your current track.
+      </p>
+
+      <section class="card">
+        <h2>Spotify App Settings</h2>
+        <label for="clientId">Client ID</label>
+        <input id="clientId" type="text" placeholder="Spotify Client ID" />
+
+        <label for="redirectUri">Redirect URI</label>
+        <input id="redirectUri" type="url" />
+
+        <button id="saveConfigBtn" class="secondary">Save Settings</button>
+      </section>
+
+      <section class="card">
+        <h2>Session</h2>
+        <div class="button-row">
+          <button id="loginBtn">Sign in with Spotify</button>
+          <button id="logoutBtn" class="secondary">Log out</button>
+        </div>
+        <p id="status" class="status">Not connected.</p>
+      </section>
+
+      <section class="card">
+        <h2>Now Playing</h2>
+        <p id="trackName">No active playback detected.</p>
+
+        <div class="time-row">
+          <span id="currentTime">0:00</span>
+          <input id="seekSlider" type="range" min="0" max="100" value="0" disabled />
+          <span id="durationTime">0:00</span>
+        </div>
+
+        <div class="button-row">
+          <button id="prevBtn" class="secondary" disabled>Previous</button>
+          <button id="playPauseBtn" class="secondary" disabled>Play/Pause</button>
+          <button id="nextBtn" class="secondary" disabled>Next</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
